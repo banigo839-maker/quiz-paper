@@ -1,1 +1,1 @@
-{"name":"Quiz Paper","short_name":"Quiz Paper","description":"競技クイズのペーパー練習アプリ","start_url":"./","scope":"./","display":"standalone","background_color":"#f3f4f6","theme_color":"#172033","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{"name":"Quiz Paper","short_name":"Quiz Paper","start_url":"./","scope":"./","display":"standalone","background_color":"#f3f4f6","theme_color":"#172033","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}

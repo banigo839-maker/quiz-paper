@@ -1,0 +1,47 @@
+<!doctype html><html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#172033"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg">
+<title>Quiz Paper</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;padding-bottom:88px}
+header{position:sticky;top:0;z-index:5;background:#172033;color:white;padding:12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}
+main{max-width:820px;margin:auto;padding:12px}.card{background:white;border-radius:16px;padding:16px;margin:10px 0;box-shadow:0 1px 5px #0001}
+button,select,input{font:inherit}button{border:0;border-radius:10px;padding:10px 13px;font-weight:800}.blue{background:#2563eb;color:white}.green{background:#16a34a;color:white}.red{background:#dc2626;color:white}.gray{background:#e5e7eb}
+.q{font-size:18px;line-height:1.7;margin:12px 0}.ans{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:17px}.small{font-size:12px;color:#64748b}
+.result{margin-top:10px;padding:10px;border-radius:10px}.ok{background:#ecfdf5}.ng{background:#fef2f2}.hidden{display:none}.bottom{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid #ddd;padding:9px 10px calc(9px + env(safe-area-inset-bottom));display:flex;justify-content:center;gap:8px}
+</style></head><body>
+<header><div class="row between"><b>Quiz Paper</b><span id="count">0 / 0</span></div></header>
+<main>
+<div class="card"><b>問題集</b><div class="row" style="margin-top:8px"><input id="file" type="file" accept=".csv,.txt,.tsv"><button class="blue" id="load">読み込んで保存</button></div>
+<div class="row" style="margin-top:8px"><select id="decks"></select><button class="gray" id="openDeck">開く</button><button class="red" id="deleteDeck">削除</button></div>
+<div class="small">Front / Back / Tags CSV、またはタブ区切りを読み込めます。読み込んだ問題集はこの端末に保存します。</div></div>
+<div class="card" id="quizCard"><div class="small" id="meta"></div><div class="q" id="question">問題集を選択してください。</div><input class="ans" id="input" placeholder="解答を入力" autocomplete="off">
+<div class="row" style="margin-top:10px"><button class="blue" id="submit">採点</button><button class="gray" id="show">正解を見る</button></div>
+<div id="result" class="result hidden"></div>
+<div id="manual" class="row hidden" style="margin-top:8px"><button class="green" id="forceOk">○に訂正</button><button class="red" id="forceNg">×に訂正</button></div></div>
+<div class="card"><b>成績</b><p id="score">0 / 0</p><div class="row"><button class="gray" id="reset">この回を最初から</button><button class="gray" id="shuffle">シャッフル</button></div></div>
+</main>
+<div class="bottom"><button class="gray" id="prev">← 前</button><button class="blue" id="next">次 →</button></div>
+<script>
+"use strict";
+const E=x=>document.getElementById(x);let decks=JSON.parse(localStorage.getItem("quizpaper_decks")||"{}"),data=[],order=[],pos=0,answers={},results={};
+function norm(s){return String(s??"").normalize("NFKC").trim().replace(/\s+/g,"").replace(/[・･]/g,"").replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).toLowerCase()}
+function acceptable(user,back){let u=norm(user), variants=String(back).split(/[／/;；,，]/).map(norm).filter(Boolean);return variants.some(a=>u===a)}
+function parseCSV(t){let R=[],r=[],c="",z=false;for(let i=0;i<t.length;i++){let x=t[i];if(x=='"'){if(z&&t[i+1]=='"'){c+='"';i++}else z=!z}else if(x==','&&!z){r.push(c);c=""}else if((x=="\n"||x=="\r")&&!z){if(x=="\r"&&t[i+1]=="\n")i++;r.push(c);if(r.some(v=>v.trim()))R.push(r);r=[];c=""}else c+=x}r.push(c);if(r.some(v=>v.trim()))R.push(r);return R}
+function parseText(t){let lines=t.split(/\r?\n/).filter(x=>x&&!x.startsWith("#"));if(lines.some(x=>x.includes("\t")))return lines.map(x=>x.split("\t"));return parseCSV(t)}
+function refreshDecks(){let s=E("decks");s.innerHTML="";Object.keys(decks).forEach(n=>{let o=document.createElement("option");o.value=n;o.textContent=n+" ("+decks[n].length+"問)";s.appendChild(o)});if(!Object.keys(decks).length){let o=document.createElement("option");o.textContent="保存済み問題集なし";s.appendChild(o)}}
+async function loadFile(){let f=E("file").files[0];if(!f)return alert("ファイルを選択");let R=parseText(await f.text());if(!R.length)return;let h=R[0].map(x=>x.trim().toLowerCase()),fi=h.indexOf("front"),bi=h.indexOf("back"),ti=h.indexOf("tags"),start=(fi>=0&&bi>=0)?1:0;if(fi<0){fi=0;bi=1;ti=2}let a=[];for(let i=start;i<R.length;i++){let r=R[i];if(r[fi]?.trim()&&r[bi]?.trim())a.push({q:r[fi].trim(),a:r[bi].trim(),tags:ti>=0?(r[ti]||"").trim():""})}if(!a.length)return alert("問題を認識できませんでした");let name=f.name.replace(/\.[^.]+$/,"");decks[name]=a;localStorage.setItem("quizpaper_decks",JSON.stringify(decks));refreshDecks();E("decks").value=name;openDeck();alert(a.length+"問を保存しました")}
+function openDeck(){let n=E("decks").value;if(!decks[n])return;data=decks[n];order=data.map((_,i)=>i);pos=0;answers={};results={};render()}
+function render(){if(!data.length)return;let x=data[order[pos]],k=order[pos];E("question").textContent=(pos+1)+". "+x.q;E("meta").textContent=x.tags||"";E("input").value=answers[k]||"";E("count").textContent=(pos+1)+" / "+data.length;E("result").className="result hidden";E("manual").className="row hidden";updateScore()}
+function grade(){if(!data.length)return;let k=order[pos],x=data[k],u=E("input").value;answers[k]=u;let ok=acceptable(u,x.a);results[k]=ok;showResult(ok,x.a)}
+function showAnswer(){if(!data.length)return;let k=order[pos],x=data[k];answers[k]=E("input").value;results[k]=false;showResult(false,x.a)}
+function showResult(ok,a){let r=E("result");r.className="result "+(ok?"ok":"ng");r.innerHTML=(ok?"<b>○ 正解</b>":"<b>× 不正解</b>")+"<br>正解："+escapeHtml(a);E("manual").className="row";updateScore()}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function updateScore(){let v=Object.values(results),ok=v.filter(Boolean).length;E("score").textContent=ok+" / "+v.length+" 正解"}
+function next(){if(data.length){pos=(pos+1)%data.length;render()}}function prev(){if(data.length){pos=(pos-1+data.length)%data.length;render()}}
+E("load").onclick=loadFile;E("openDeck").onclick=openDeck;E("deleteDeck").onclick=()=>{let n=E("decks").value;if(decks[n]&&confirm(n+" を削除しますか？")){delete decks[n];localStorage.setItem("quizpaper_decks",JSON.stringify(decks));data=[];refreshDecks();E("question").textContent="問題集を選択してください。"}};
+E("submit").onclick=grade;E("show").onclick=showAnswer;E("next").onclick=next;E("prev").onclick=prev;E("forceOk").onclick=()=>{results[order[pos]]=true;showResult(true,data[order[pos]].a)};E("forceNg").onclick=()=>{results[order[pos]]=false;showResult(false,data[order[pos]].a)};
+E("reset").onclick=()=>{pos=0;answers={};results={};render()};E("shuffle").onclick=()=>{for(let i=order.length-1;i;i--){let j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]]}pos=0;render()};
+E("input").addEventListener("keydown",e=>{if(e.key==="Enter")grade()});refreshDecks();if(Object.keys(decks).length){E("decks").value=Object.keys(decks)[0];openDeck()}
+if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js"));
+</script></body></html>
